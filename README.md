@@ -33,4 +33,4 @@ $$
 u(x,y) = \frac{1}{\pi K^2} \sum_{i,j=1}^{K} a_{ij} \cdot (i^2 + j^2)^{r-1} \sin(\pi i x) \sin(\pi j y)
 $$
 
-where $r = 0.5$ and coefficients $a_{ij} \sim \mathcal{N}(0,1)$[cite: 32]. [cite_start]The parameter $K$ acts as an indicator for the problem's complexity: as $K$ increases, the solution contains higher frequency components.
+where $r = 0.5$ and coefficients $a_{ij} \sim \mathcal{N}(0,1)$[cite: 32]. The parameter $K$ acts as an indicator for the problem's complexity: as $K$ increases, the solution contains higher frequency components.
