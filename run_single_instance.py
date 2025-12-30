@@ -15,44 +15,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 import json
+import sys
+
+# Add parent directory to path if running from project root
+sys.path.append('.')
 
 from generate_data import PoissonDataGenerator
 from models import MLP
 from train import train_data_driven, train_pinn, evaluate_model
+from model_checkpoint import save_model_checkpoint
 
 
 def generate_single_instance(K, N=64, seed=42, save_dir='single_instance'):
-    """
-    Generate one representative instance with specified complexity K.
-    
-    Parameters:
-    K : int
-        Complexity level (number of frequency modes)
-    N : int
-        Grid size (N x N)
-    seed : int
-        Random seed for reproducibility
-    save_dir : str
-        Directory to save the instance
-        
-    Returns:
-    instance : dict
-        Dictionary containing f, u, a_ij, and metadata
-    """
+    """Generate one representative instance with specified complexity K."""
     print(f"\nGenerating representative instance with K={K}, seed={seed}")
     print("-" * 70)
     
-    # Create generator
     generator = PoissonDataGenerator(N=N, r=0.5)
-    
-    # Generate one sample
     f, u, a_ij = generator.generate_sample(K, seed=seed)
     
-    # Create save directory
     save_path = Path(save_dir)
     save_path.mkdir(exist_ok=True)
     
-    # Save instance
     instance = {
         'K': K,
         'N': N,
@@ -62,13 +46,11 @@ def generate_single_instance(K, N=64, seed=42, save_dir='single_instance'):
         'a_ij': a_ij
     }
     
-    # Save to disk
     np.savez(
         save_path / f'instance_K{K}_seed{seed}.npz',
         K=K, N=N, seed=seed, f=f, u=u, a_ij=a_ij
     )
     
-    # Save metadata
     metadata = {
         'K': int(K),
         'N': int(N),
@@ -80,7 +62,6 @@ def generate_single_instance(K, N=64, seed=42, save_dir='single_instance'):
     with open(save_path / f'instance_K{K}_seed{seed}_metadata.json', 'w') as file:
         json.dump(metadata, file, indent=2)
     
-    # Visualize
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     
     im1 = axes[0].imshow(f, cmap='RdBu_r', origin='lower', extent=[0, 1, 0, 1])
@@ -101,32 +82,13 @@ def generate_single_instance(K, N=64, seed=42, save_dir='single_instance'):
     plt.close()
     
     print(f"Instance saved to: {save_path}")
-    print(f"  f range: [{f.min():.4f}, {f.max():.4f}]")
-    print(f"  u range: [{u.min():.6f}, {u.max():.6f}]")
-    print(f"  Coefficients a_ij shape: {a_ij.shape}")
     
     return instance
 
 
 def load_single_instance(K, seed=42, load_dir='single_instance'):
-    """
-    Load a previously generated instance.
-    
-    Parameters:
-    K : int
-        Complexity level
-    seed : int
-        Random seed used for generation
-    load_dir : str
-        Directory containing the instance
-        
-    Returns:
-    instance : dict
-        Dictionary containing f, u, a_ij, and metadata
-    """
+    """Load a previously generated instance."""
     load_path = Path(load_dir)
-    
-    # Load data
     data = np.load(load_path / f'instance_K{K}_seed{seed}.npz')
     
     instance = {
@@ -139,7 +101,6 @@ def load_single_instance(K, seed=42, load_dir='single_instance'):
     }
     
     print(f"\nLoaded instance: K={instance['K']}, N={instance['N']}, seed={instance['seed']}")
-    
     return instance
 
 
@@ -156,18 +117,11 @@ def train_on_instance(instance,
                      hidden_dim=64, num_hidden_layers=4,
                      num_epochs=5000, lr_adam=1e-3, lr_lbfgs=1.0, 
                      switch_epoch=3000, lambda_bc=1.0,
-                     device='cpu', save_dir='results_single_instance'):
+                     device='cpu', save_dir='results_single_instance',
+                     save_models=True):  # NEW PARAMETER
     """
     Train both PINN and Data-Driven methods on a single instance.
-    
-    Parameters:
-    instance : dict
-        Instance dictionary containing f, u, and metadata
-    ... (other parameters same as run_train.py)
-        
-    Returns:
-    results : dict
-        Complete results dictionary
+    NOW WITH MODEL SAVING!
     """
     K = instance['K']
     N = instance['N']
@@ -177,7 +131,6 @@ def train_on_instance(instance,
     print(f"Training on Single Instance: K={K}, seed={seed}")
     print("=" * 80)
     
-    # Create save directory
     save_path = Path(save_dir) / f"K{K}_seed{seed}"
     save_path.mkdir(parents=True, exist_ok=True)
     
@@ -191,8 +144,6 @@ def train_on_instance(instance,
     
     print(f"   Grid size: {N} x {N}")
     print(f"   Total points: {coords.shape[0]}")
-    print(f"   f range: [{f_values.min():.4f}, {f_values.max():.4f}]")
-    print(f"   u range: [{u_exact.min():.6f}, {u_exact.max():.6f}]")
     
     # Train Data-Driven model
     print(f"\n2. Training Data-Driven model...")
@@ -209,6 +160,23 @@ def train_on_instance(instance,
     metrics_data = evaluate_model(model_data, coords, u_exact, device=device)
     print(f"   Final L2 relative error: {metrics_data['l2_relative_error']:.6e}")
     
+    # SAVE DATA-DRIVEN MODEL
+    if save_models:
+        print(f"\n   Saving Data-Driven model...")
+        config_data = {
+            'method': 'data_driven',
+            'K': K,
+            'N': N,
+            'seed': seed,
+            'hidden_dim': hidden_dim,
+            'num_hidden_layers': num_hidden_layers,
+            'num_epochs': num_epochs,
+            'lr_adam': lr_adam,
+            'lr_lbfgs': lr_lbfgs,
+            'switch_epoch': switch_epoch
+        }
+        save_model_checkpoint(model_data, history_data, metrics_data, config_data, save_path)
+    
     # Train PINN model
     print(f"\n3. Training PINN model...")
     model_pinn = MLP(input_dim=2, hidden_dim=hidden_dim,
@@ -224,10 +192,27 @@ def train_on_instance(instance,
     metrics_pinn = evaluate_model(model_pinn, coords, u_exact, device=device)
     print(f"   Final L2 relative error: {metrics_pinn['l2_relative_error']:.6e}")
     
-    # Generate plots
+    # SAVE PINN MODEL
+    if save_models:
+        print(f"\n   💾 Saving PINN model...")
+        config_pinn = {
+            'method': 'pinn',
+            'K': K,
+            'N': N,
+            'seed': seed,
+            'hidden_dim': hidden_dim,
+            'num_hidden_layers': num_hidden_layers,
+            'num_epochs': num_epochs,
+            'lr_adam': lr_adam,
+            'lr_lbfgs': lr_lbfgs,
+            'switch_epoch': switch_epoch,
+            'lambda_bc': lambda_bc
+        }
+        save_model_checkpoint(model_pinn, history_pinn, metrics_pinn, config_pinn, save_path)
+    
+    # Generate plots (same as before)
     print(f"\n4. Generating visualizations...")
     
-    # Training history
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     
     axes[0].semilogy(history_data['epoch'], history_data['loss'], 
@@ -254,7 +239,7 @@ def train_on_instance(instance,
     plt.savefig(save_path / 'training_history.png', dpi=150, bbox_inches='tight')
     plt.close()
     
-    # Predictions
+    # Predictions plot
     u_exact_grid = u_exact.cpu().numpy().reshape(N, N)
     u_pred_data_grid = metrics_data['u_pred'].reshape(N, N)
     u_pred_pinn_grid = metrics_pinn['u_pred'].reshape(N, N)
@@ -267,29 +252,21 @@ def train_on_instance(instance,
     vmin = min(u_exact_grid.min(), u_pred_data_grid.min(), u_pred_pinn_grid.min())
     vmax = max(u_exact_grid.max(), u_pred_data_grid.max(), u_pred_pinn_grid.max())
     
-    # Row 1: Solutions
     im0 = axes[0, 0].imshow(u_exact_grid, cmap='RdBu_r', origin='lower', 
                             extent=[0, 1, 0, 1], vmin=vmin, vmax=vmax)
     axes[0, 0].set_title('Ground Truth u', fontsize=12, fontweight='bold')
-    axes[0, 0].set_xlabel('x')
-    axes[0, 0].set_ylabel('y')
     plt.colorbar(im0, ax=axes[0, 0])
     
     im1 = axes[0, 1].imshow(u_pred_data_grid, cmap='RdBu_r', origin='lower',
                             extent=[0, 1, 0, 1], vmin=vmin, vmax=vmax)
     axes[0, 1].set_title('Data-Driven Prediction', fontsize=12, fontweight='bold')
-    axes[0, 1].set_xlabel('x')
-    axes[0, 1].set_ylabel('y')
     plt.colorbar(im1, ax=axes[0, 1])
     
     im2 = axes[0, 2].imshow(u_pred_pinn_grid, cmap='RdBu_r', origin='lower',
                             extent=[0, 1, 0, 1], vmin=vmin, vmax=vmax)
     axes[0, 2].set_title('PINN Prediction', fontsize=12, fontweight='bold')
-    axes[0, 2].set_xlabel('x')
-    axes[0, 2].set_ylabel('y')
     plt.colorbar(im2, ax=axes[0, 2])
     
-    # Row 2: Errors
     axes[1, 0].axis('off')
     
     error_max = max(error_data.max(), error_pinn.max())
@@ -297,15 +274,11 @@ def train_on_instance(instance,
     im3 = axes[1, 1].imshow(error_data, cmap='hot', origin='lower',
                             extent=[0, 1, 0, 1], vmin=0, vmax=error_max)
     axes[1, 1].set_title('Data-Driven Error', fontsize=12, fontweight='bold')
-    axes[1, 1].set_xlabel('x')
-    axes[1, 1].set_ylabel('y')
     plt.colorbar(im3, ax=axes[1, 1])
     
     im4 = axes[1, 2].imshow(error_pinn, cmap='hot', origin='lower',
                             extent=[0, 1, 0, 1], vmin=0, vmax=error_max)
     axes[1, 2].set_title('PINN Error', fontsize=12, fontweight='bold')
-    axes[1, 2].set_xlabel('x')
-    axes[1, 2].set_ylabel('y')
     plt.colorbar(im4, ax=axes[1, 2])
     
     plt.suptitle(f'Predictions and Errors (K={K})', 
@@ -318,11 +291,7 @@ def train_on_instance(instance,
     
     # Save results
     results = {
-        'instance': {
-            'K': K,
-            'N': N,
-            'seed': seed
-        },
+        'instance': {'K': K, 'N': N, 'seed': seed},
         'model_config': {
             'hidden_dim': hidden_dim,
             'num_hidden_layers': num_hidden_layers,
@@ -372,22 +341,16 @@ def train_on_instance(instance,
           f"{metrics_pinn['linf_relative_error']:<15.6e} {metrics_pinn['mae']:<15.6e}")
     print("=" * 80)
     
-    return results
+    return results, model_data, model_pinn  # Also return the models
 
 
 def main():
-    """
-    Main workflow:
-    1. Generate one representative instance
-    2. Train both methods on it
-    3. Compare results
-    """
     import argparse
     
-    parser = argparse.ArgumentParser(description='Generate and train on single instance')
+    parser = argparse.ArgumentParser(description='Generate and train on single instance (with model saving)')
     parser.add_argument('--K', type=int, required=True, choices=[1, 4, 8, 16],
                        help='Complexity level')
-    parser.add_argument('--seed', type=int, default=42,
+    parser.add_argument('--seed', type=int, default=11,  # Changed default to 11 as per your files
                        help='Random seed for instance generation')
     parser.add_argument('--N', type=int, default=64,
                        help='Grid size')
@@ -405,6 +368,8 @@ def main():
                        help='PINN boundary condition weight')
     parser.add_argument('--device', type=str, default='cpu',
                        help='Device to use')
+    parser.add_argument('--no_save', action='store_true',
+                       help='Do not save model checkpoints')
     
     args = parser.parse_args()
     
@@ -418,16 +383,19 @@ def main():
             print(f"Instance not found. Generating new instance...")
             instance = generate_single_instance(K=args.K, N=args.N, seed=args.seed)
     
-    # Train on instance
-    results = train_on_instance(
+    # Train on instance (with model saving enabled by default)
+    results, model_data, model_pinn = train_on_instance(
         instance,
         hidden_dim=args.hidden_dim,
         num_hidden_layers=args.num_layers,
         num_epochs=args.epochs,
         switch_epoch=args.switch_epoch,
         lambda_bc=args.lambda_bc,
-        device=args.device
+        device=args.device,
+        save_models=not args.no_save  # Save unless --no_save is specified
     )
+    
+    print("\nTraining complete! Models saved and ready for Task 3 (loss landscape visualization).")
 
 
 if __name__ == "__main__":
