@@ -7,3 +7,6 @@ venv/
 
 /data
 /figures
+
+/single_instance
+/results_single_instance
