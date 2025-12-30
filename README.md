@@ -34,3 +34,15 @@ u(x,y) = \frac{1}{\pi K^2} \sum_{i,j=1}^{K} a_{ij} \cdot (i^2 + j^2)^{r-1} \sin(
 $$
 
 where $r = 0.5$ and coefficients $a_{ij} \sim \mathcal{N}(0,1)$[cite: 32]. The parameter $K$ acts as an indicator for the problem's complexity: as $K$ increases, the solution contains higher frequency components.
+
+### Reference:
+
+Krishnapriyan, A. S., Mudigonda, M., Karniadakis, G. E., & Prabhat, M. (2021). 
+*Characterizing possible failure modes in physics-informed neural networks*. 
+Advances in Neural Information Processing Systems, 34, 26548-26560. 
+https://arxiv.org/abs/2109.01050
+
+Li, H., Xu, Z., Taylor, G., Studer, C., & Goldstein, T. (2018). 
+*Visualizing the loss landscape of neural nets*. 
+Advances in Neural Information Processing Systems, 31. 
+https://arxiv.org/abs/1712.09913
