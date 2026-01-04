@@ -14,7 +14,7 @@ The goal is to visualize and compare how the loss landscape degrades for both me
 
 ## Problem Statement
 
-We focus on a prototypical linear elliptic PDE, the **Poisson Equation**, defined on a 2D square domain $D = [0, 1]^2$[cite: 26]:
+We focus on a prototypical linear elliptic PDE, the **Poisson Equation**, defined on a 2D square domain $D = [0, 1]^2$:
 
 $$
 \begin{aligned}
